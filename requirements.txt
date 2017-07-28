@@ -1,0 +1,14 @@
+cycler
+joblib
+matplotlib
+numpy
+pandas
+psycopg2
+pyparsing
+python-dateutil
+pytz
+scikit-learn
+scipy
+six
+sklearn
+SQLAlchemy
