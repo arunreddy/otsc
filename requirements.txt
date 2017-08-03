@@ -10,5 +10,4 @@ pytz
 scikit-learn
 scipy
 six
-sklearn
 SQLAlchemy

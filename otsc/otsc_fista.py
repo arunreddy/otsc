@@ -30,10 +30,8 @@ class OTSC_FISTA(object):
         print(self.L1.shape, self.L2.shape, self.L12.shape)
 
     def func_R1(self, del_f):
-        if not type(del_f) is sparse.csr_matrix:
-            print('>[ERR]: Given matrix is not a sparse matrix.')
 
-        return np.abs(del_f.data).sum()
+        return np.abs(del_f).sum()
 
     def func_QL(self, del_f):
         fdf = self.f_prime_l + del_f
@@ -61,20 +59,20 @@ class OTSC_FISTA(object):
 
         return Q[0, 0] + R
 
+
+    def grad_func_F(self):
+        pass
+
     def func_G(self, x_del_f, y_del_f, l_cap, labeled=True):
 
         fy = self.func_F(y_del_f)
 
-        print(type(x_del_f),type(y_del_f))
-
+        print(type(x_del_f), type(y_del_f))
 
         xmy = x_del_f - y_del_f
-        gfy = self.grad_f(y_del_f)
+        gfy = self.grad_func_F(y_del_f)
 
-        return fy + gfy.transpose()*xmy + (l_cap/2) * xmy.transpose()*xmy + self.func_R1(x_del_f)
-
-
-
+        return fy + gfy.transpose() * xmy + (l_cap / 2) * xmy.transpose() * xmy + self.func_R1(x_del_f)
 
         # return F(y) + np.dot((x - y), grad_f(y)) (l_prime / 2) * np.square(np.linalg.norm(x - y, ord=2)) + g(x)
 
@@ -85,23 +83,11 @@ class OTSC_FISTA(object):
 
     def prox_tlasso(self, f, t):
 
-        _fmt = f.copy()
-        _fat = f.copy()
+        _fmt = f[:] - t
+        _fat = f[:] + t
 
-        _fmt.data = _fmt.data - t
-        _fat.data = _fat.data + t
-        _fmt.eliminate_zeros()
-        _fat.eliminate_zeros()
+        return np.maximum(0,_fmt) + np.minimum(0,_fat)
 
-        _zeros = f.multiply(0.)
-
-        fmt = _fmt.multiply(_fmt >= _zeros)
-        fat = _fat.multiply(_fat <= _zeros)
-
-        prox = fmt + fat
-        prox = prox.eliminate_zeros()
-
-        return prox
 
     def prox_t2norm(self, f):
         pass
@@ -123,8 +109,8 @@ class OTSC_FISTA(object):
         self.lambda_1 = 0.2
         self.lambda_2 = 0.2
 
-        x_del_f_l = sparse.csr_matrix((f_prime_l.shape[0], 1), dtype=float)
-        x_del_f_u = sparse.csr_matrix((f_prime_u.shape[0], 1), dtype=float)
+        x_del_f_l = np.zeros(shape=(f_prime_l.shape[0], 1), dtype=float)
+        x_del_f_u = np.zeros(shape=(f_prime_u.shape[0], 1), dtype=float)
 
         y_del_f_l = x_del_f_l
         y_del_f_u = x_del_f_u
@@ -135,8 +121,8 @@ class OTSC_FISTA(object):
         for k in range(2):
             # Computing del_f_l
             i = 0
-            l_l_cap = np.power(eta,i) * l_l
-            while self.func_F(x_del_f_l) > self.func_G(self.prox_tlasso(y_del_f_l, t_l), y_del_f_l,l_l_cap):
+            l_l_cap = np.power(eta, i) * l_l
+            while self.func_F(x_del_f_l) > self.func_G(self.prox_tlasso(y_del_f_l, t_l), y_del_f_l, l_l_cap):
                 i += 1
                 l_l_cap = np.power(eta, i) * l_l
                 if i > 10:
@@ -192,7 +178,7 @@ class OTSC_FISTA(object):
 
 
 if __name__ == '__main__':
-    S, D, y_l, y_u, y_prime_l, y_prime_u, f_prime_l, f_prime_u = joblib.load('features.dat')
+    S, D, y_l, y_u, y_prime_l, y_prime_u, f_prime_l, f_prime_u = joblib.load('../data/features.dat')
 
     print('S', S.shape)
     print('D', D.shape)
@@ -202,13 +188,19 @@ if __name__ == '__main__':
     print('y_prime_u', len(y_prime_u))
 
     S = sparse.csr_matrix(S)
-    y_l = sparse.csr_matrix(y_l).transpose()
-    y_u = sparse.csr_matrix(y_u).transpose()
-    f_prime_l = sparse.csr_matrix(f_prime_l).transpose()
-    f_prime_u = sparse.csr_matrix(f_prime_u).transpose()
+
+    y_l = np.asarray(y_l, dtype=float)
+    y_u = np.asarray(y_u, dtype=float)
+
+    f_prime_l = np.asarray(f_prime_l, dtype=float)
+    f_prime_u = np.asarray(f_prime_u, dtype=float)
+
+    y_prime_l = np.asarray(y_prime_l, dtype=float)
+    y_prime_u = np.asarray(y_prime_u, dtype=float)
 
     print('y', y_l.shape, y_u.shape)
     print('f_prime', f_prime_l.shape, f_prime_u.shape)
+    print('y_prime', y_prime_l.shape, y_prime_u.shape)
 
     obj = OTSC_FISTA(S, D, y_l, y_u, y_prime_l, y_prime_u, f_prime_l, f_prime_u)
     obj.execute_algorithm()
