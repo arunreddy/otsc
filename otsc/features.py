@@ -1,7 +1,7 @@
 """
 Read the data from database and generate tf-idf/word2vec features.
 """
-from otsc.config import *
+from config import *
 from sqlalchemy import create_engine
 import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
@@ -11,109 +11,73 @@ import numpy as np
 import joblib
 
 
-def tf_idf(D):
-  vectorizer = TfidfVectorizer(ngram_range = [1, 3], min_df = 5)
-  return vectorizer.fit_transform(D)
+class FeaturesGenerator(object):
+    def __init__(self):
+        pass
 
-def tf_bin(D):
-  vectorizer = CountVectorizer(binary = True, ngram_range = [1,3], min_df = 5)
-  return vectorizer.fit_transform(D)
+    def tf_idf(self, D):
+        vectorizer = TfidfVectorizer(ngram_range=[1, 3], min_df=5)
+        return vectorizer.fit_transform(D)
 
-def word2vec(D):
-  pass
+    def tf_bin(self, D):
+        vectorizer = CountVectorizer(binary=True, ngram_range=[1, 3], min_df=5)
+        return vectorizer.fit_transform(D)
 
+    def word2vec(self, D):
+        pass
 
+    def genereate_features(self, df, t='tf-idf'):
 
-def genereate_features(df, t = 'tf-idf'):
-  
-  if t == 'tf-idf':
-    X = tf_idf(df['review_txt'])
-  
-  elif t == 'binary':
-    X = tf_bin(df['review_txt'])
-  
-  elif   t == 'word2vec':
-    X = word2vec(df['review_txt'])
+        if t == 'tf-idf':
+            X = self.tf_idf(df['review_txt'])
 
+        elif t == 'binary':
+            X = self.tf_bin(df['review_txt'])
 
-  return X
+        elif t == 'word2vec':
+            X = self.word2vec(df['review_txt'])
 
+        return X
 
-def graph_laplacian(X, t_sim='cosine', normed=True):
-  
-  # Compute the similarity matrix A
-  if t_sim == 'cosine':
-    A = cosine_similarity(X)
-  
-  elif t_sim == 'sxd':
-    pass
-  
-  
-  # Laplacian.
-  L, D = csgraph.laplacian(A,normed = normed, return_diag = True)
-  
-  return L, D
+    def graph_laplacian(self, X, t_sim='cosine', normed=True):
 
-def load_data(n):
-  df_pos = pd.read_sql('SELECT * FROM acl_imdb WHERE label=1 LIMIT %d'%n,
-                       con = create_engine(DB_ENGINE), parse_dates = True)
-  df_neg = pd.read_sql('SELECT * FROM acl_imdb WHERE label=-1 LIMIT %d'%n,
-                       con = create_engine(DB_ENGINE), parse_dates = True)
+        # Compute the similarity matrix A
+        if t_sim == 'cosine':
+            A = cosine_similarity(X)
 
-  df_pos['f_prime'] = df_pos['stanford_confidence_scores'].apply(lambda x: np.max(list(map(float, x.split(',')))))
-  df_neg['f_prime'] = df_neg['stanford_confidence_scores'].apply(lambda x: np.max(list(map(float, x.split(',')))))
-  return df_pos, df_neg
+        elif t_sim == 'sxd':
+            pass
 
-def generate_features(df_pos, df_neg, n, n_labeled):
-  df_pos_l = df_pos[:n_labeled]
-  df_neg_l = df_neg[:n_labeled]
-  df_pos_u = df_pos[n_labeled:]
-  df_neg_u = df_neg[n_labeled:]
-  
-  # Combine all the data.
-  df_l = df_pos_l.append(df_neg_l)
-  df_u = df_pos_u.append(df_neg_u)
-  df = df_l.append(df_u)
-  
-  # Laplacian matrix.
-  X = genereate_features(df)
-  L, D = graph_laplacian(X)
-  
-  # Known labels.
-  y_l = [1] * df_pos_l.shape[0] + [-1] * df_neg_l.shape[0]
-  y_u = [1] * df_pos_u.shape[0] + [-1] * df_neg_u.shape[0]
+        # Laplacian.
+        L, D = csgraph.laplacian(A, normed=normed, return_diag=True)
 
-  # OTSC labels.
-  y_prime_l = np.hstack((df_pos_l['stanford_label'].values, df_neg_l['stanford_label'].values))
-  y_prime_u = np.hstack((df_neg_u['stanford_label'].values, df_neg_u['stanford_label'].values))
-  
-  # OTSC confidence scores.
-  f_prime_l = np.hstack((df_pos_l['f_prime'].values, df_neg_l['f_prime'].values))
-  f_prime_u = np.hstack((df_pos_u['f_prime'].values, df_neg_u['f_prime'].values))
-  
-  return L, D, y_l, y_u, y_prime_l, y_prime_u, f_prime_l, f_prime_u
+        return L, D
 
-if __name__ == '__main__':
-  
-  # Parameters.
-  n = 2000
-  n_labeled = 500
-  
-  df_pos, df_neg = load_data(n)
-  L, D, y_l, y_u, y_prime_l, y_prime_u, f_prime_l, f_prime_u = generate_features(df_pos, df_neg, n, n_labeled)
+    def generate_features(self, df_pos, df_neg, n):
 
-  print(len(y_l))
-  
-  y_prime = np.asarray(y_prime_l)
+        print("> Generating features..")
+        print("\t Positive: %d" % (df_pos.shape[0]))
+        print("\t Negative: %d" % (df_neg.shape[0]))
+        # Combine all the data.
+        df = df_pos.copy().append(df_neg)
 
-  y_prime = y_prime-2
-  
-  count = 0
-  for i in range(len(y_l)):
-    if (y_l[i]*y_prime[i] > 0):
-      count+=1
-  
-  print(count/len(y_l))
+        # Laplacian matrix.
+        X = self.genereate_features(df)
+        L, D = self.graph_laplacian(X)
 
-  
-  joblib.dump([L, D, y_l, y_u, y_prime_l, y_prime_u, f_prime_l, f_prime_u],'features.dat',compress = 5)
+        # Known labels.
+        y = np.asarray([1] * df_pos.shape[0] + [-1] * df_neg.shape[0])
+
+        # OTSC labels.
+        y_prime = np.hstack((df_pos['stanford_label'].values, df_neg['stanford_label'].values))
+        y_prime = y_prime - 2
+
+        # OTSC confidence scores.
+        f_prime = np.hstack((df_pos['f_prime'].values, df_neg['f_prime'].values))
+
+        # Reshape the arrays.
+        f_prime = f_prime.reshape(f_prime.shape[0], 1)
+        y_prime = y_prime.reshape(y_prime.shape[0], 1)
+        y = y.reshape(y.shape[0], 1)
+
+        return X, L, D, y, y_prime, f_prime
