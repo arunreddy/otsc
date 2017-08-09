@@ -7,7 +7,7 @@ class BinaryClassifier(BaseClassifier):
     def __init__(self):
         BaseClassifier.__init__(self)
 
-    def train_test_split(self, X, L, y, y_prime, f_prime, n_labeled):
+    def train_test_split(self, X, L, y, y_prime, f_prime, n_labeled, rand=0):
         index_pos = np.where(y > 0)[0]
         index_neg = np.where(y < 0)[0]
 

@@ -9,7 +9,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from scipy.sparse import csgraph
 import numpy as np
 import joblib
-
+from scipy import sparse
 
 class FeaturesGenerator(object):
     def __init__(self):
@@ -48,8 +48,13 @@ class FeaturesGenerator(object):
         elif t_sim == 'sxd':
             pass
 
+
+        A[A<.2] = 0.
+
         # Laplacian.
         L, D = csgraph.laplacian(A, normed=normed, return_diag=True)
+        L = sparse.csc_matrix(L)
+        L.eliminate_zeros()
 
         return L, D
 
