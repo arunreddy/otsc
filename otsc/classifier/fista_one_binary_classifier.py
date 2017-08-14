@@ -89,7 +89,7 @@ class FistaOneBinaryClassifier(BinaryClassifier):
 
         f_val = []
         l_val = []
-        for k in range(iterations):
+        for k in tqdm(range(iterations), desc='[λ_1 :%0.2f and λ_2:%0.2f]'%(lambda_1,lambda_2)):
 
             # Computing del_f_l
             i = 0
@@ -162,7 +162,6 @@ class FistaOneBinaryClassifier(BinaryClassifier):
 
         s_acc = s_acc/n
         f_acc = f_acc/n
-
 
         return f_val, l_val, x_del_f, s_acc, f_acc
 

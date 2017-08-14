@@ -8,7 +8,7 @@ class SvmBinaryClassifier(BinaryClassifier):
 
     def exec(self, X_l, X_u, y_l, y_u):
 
-        clf = LogisticRegression()
+        clf = LinearSVC()
         clf.fit(X_l, y_l)
 
         y_pred = clf.predict(X_u)

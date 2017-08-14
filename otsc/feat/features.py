@@ -10,32 +10,31 @@ from scipy.sparse import csgraph
 import numpy as np
 import joblib
 from scipy import sparse
+from feat.doc2vec_util import Doc2VecUtil
 
 class FeaturesGenerator(object):
     def __init__(self):
         pass
 
     def tf_idf(self, D):
-        vectorizer = TfidfVectorizer(ngram_range=[1, 3], min_df=5)
+        vectorizer = TfidfVectorizer(ngram_range=[1, 4],min_df=20, max_df=3000)
         return vectorizer.fit_transform(D)
 
     def tf_bin(self, D):
-        vectorizer = CountVectorizer(binary=True, ngram_range=[1, 3], min_df=5)
+        vectorizer = CountVectorizer(binary=True, ngram_range=[1, 4], min_df=20, max_df=3000)
         return vectorizer.fit_transform(D)
-
-    def word2vec(self, D):
-        pass
 
     def genereate_features(self, df, t='tf-idf'):
 
         if t == 'tf-idf':
             X = self.tf_idf(df['review_txt'])
 
-        elif t == 'binary':
+        elif t == 'bin':
             X = self.tf_bin(df['review_txt'])
 
         elif t == 'word2vec':
-            X = self.word2vec(df['review_txt'])
+            obj = Doc2VecUtil(df['review_txt'])
+            X = obj.fit()
 
         return X
 
@@ -49,16 +48,17 @@ class FeaturesGenerator(object):
             pass
 
 
-        A[A<.2] = 0.
+        A[A<.8] = 0.
 
         # Laplacian.
         L, D = csgraph.laplacian(A, normed=normed, return_diag=True)
         L = sparse.csc_matrix(L)
         L.eliminate_zeros()
+        print('Nonzeros:',L.nnz)
 
         return L, D
 
-    def generate_features(self, df_pos, df_neg, n):
+    def generate_features(self, df_pos, df_neg, n, feat_type):
 
         print("> Generating features..")
         print("\t Positive: %d" % (df_pos.shape[0]))
@@ -67,7 +67,7 @@ class FeaturesGenerator(object):
         df = df_pos.copy().append(df_neg)
 
         # Laplacian matrix.
-        X = self.genereate_features(df)
+        X = self.genereate_features(df,feat_type)
         L, D = self.graph_laplacian(X)
 
         # Known labels.
