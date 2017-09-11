@@ -15,9 +15,9 @@ class AmazonFineFoodReviews(object):
         df.to_sql('amazon_fine_food_reviews', psql, if_exists='replace')
 
     def load_data(self, n):
-        df_pos = pd.read_sql('SELECT * FROM amazon_fine_food_reviews WHERE "Score"=5 ORDER BY index ASC LIMIT %d ' % n,
+        df_pos = pd.read_sql('SELECT * FROM amazon_fine_food_reviews WHERE "Score"=5 and stanford_label is not null ORDER BY index ASC LIMIT %d ' % n,
                              con=create_engine(DB_ENGINE), parse_dates=True)
-        df_neg = pd.read_sql('SELECT * FROM amazon_fine_food_reviews WHERE "Score"=1 ORDER BY index ASC LIMIT %d ' % n,
+        df_neg = pd.read_sql('SELECT * FROM amazon_fine_food_reviews WHERE "Score"=1 and stanford_label is not null ORDER BY index ASC LIMIT %d ' % n,
                              con=create_engine(DB_ENGINE), parse_dates=True)
 
         df_pos['f_prime'] = df_pos['stanford_confidence_scores'].apply(lambda x: np.max(list(map(float, x.split(',')))))
@@ -32,10 +32,7 @@ class AmazonFineFoodReviews(object):
         df_neg['review_txt'] = df_neg['Text']
         del df_neg['Text']
 
+        print(df_pos.head())
+        print(df_neg.head())
+
         return df_pos, df_neg
-
-
-if __name__ == '__main__':
-    amazon_fine_food_reviews = AmazonFineFoodReviews()
-    # amazon_fine_food_reviews.import_data_to_db()
-    df_pos, df_neg = amazon_fine_food_reviews.load_data(5000)

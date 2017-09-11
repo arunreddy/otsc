@@ -4,7 +4,7 @@ import joblib
 import numpy as np
 
 from dataset import Imdb, AmazonReviewsBinary, AmazonFineFoodReviews
-from experiments import Experiments
+from experiments2 import Experiments
 from feat.features import FeaturesGenerator
 
 if __name__ == '__main__':
@@ -35,9 +35,9 @@ if __name__ == '__main__':
         if args.dataset == 'imdb':
             dataset = Imdb()
         elif args.dataset == 'amazon_fine_foods':
-            dataset = AmazonReviewsBinary()
-        elif args.dataset == 'amazon_binary':
             dataset = AmazonFineFoodReviews()
+        elif args.dataset == 'amazon_binary':
+            dataset = AmazonReviewsBinary()
         else:
             print('> Specify the dataset.')
 

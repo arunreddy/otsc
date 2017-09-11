@@ -5,7 +5,7 @@ from config import *
 from sqlalchemy import create_engine
 import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.metrics.pairwise import cosine_similarity, rbf_kernel
 from scipy.sparse import csgraph
 import numpy as np
 import joblib
@@ -43,22 +43,24 @@ class FeaturesGenerator(object):
         # Compute the similarity matrix A
         if t_sim == 'cosine':
             A = cosine_similarity(X)
+            A[A < .1] = 0.
 
-        elif t_sim == 'sxd':
-            pass
+        elif t_sim == 'rbf':
+            A = rbf_kernel(X, gamma=1.)
+            print(np.max(A), np.mean(A), np.min(A))
+            A[A < .2] = 0.
 
-
-        A[A<.8] = 0.
 
         # Laplacian.
         L, D = csgraph.laplacian(A, normed=normed, return_diag=True)
         L = sparse.csc_matrix(L)
         L.eliminate_zeros()
         print('Nonzeros:',L.nnz)
+        print('Sparsity:',(L.nnz*100.)/(L.shape[0]*L.shape[1]))
 
         return L, D
 
-    def generate_features(self, df_pos, df_neg, n, feat_type):
+    def generate_features(self, df_pos, df_neg, n, feat_type, sim):
 
         print("> Generating features..")
         print("\t Positive: %d" % (df_pos.shape[0]))
@@ -68,7 +70,7 @@ class FeaturesGenerator(object):
 
         # Laplacian matrix.
         X = self.genereate_features(df,feat_type)
-        L, D = self.graph_laplacian(X)
+        L, D = self.graph_laplacian(X,t_sim=sim)
 
         # Known labels.
         y = np.asarray([1] * df_pos.shape[0] + [-1] * df_neg.shape[0])
@@ -84,5 +86,7 @@ class FeaturesGenerator(object):
         f_prime = f_prime.reshape(f_prime.shape[0], 1)
         y_prime = y_prime.reshape(y_prime.shape[0], 1)
         y = y.reshape(y.shape[0], 1)
+
+        print(L.shape)
 
         return X, L, D, y, y_prime, f_prime

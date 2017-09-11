@@ -1,9 +1,7 @@
-from classifier.binary_classifier import BinaryClassifier
 import numpy as np
 import scipy.sparse as sparse
-from matplotlib import pyplot as plt
-from tqdm import tqdm
-import joblib
+
+from classifier.binary_classifier import BinaryClassifier
 
 
 class FistaOneBinaryClassifier(BinaryClassifier):
@@ -89,7 +87,8 @@ class FistaOneBinaryClassifier(BinaryClassifier):
 
         f_val = []
         l_val = []
-        for k in tqdm(range(iterations), desc='[λ_1 :%0.2f and λ_2:%0.2f]'%(lambda_1,lambda_2)):
+        # for k in tqdm(range(iterations), desc='[λ_1 :%0.2f and λ_2:%0.2f]'%(lambda_1,lambda_2)):
+        for k in range(iterations):
 
             # Computing del_f_l
             i = 0
@@ -132,8 +131,27 @@ class FistaOneBinaryClassifier(BinaryClassifier):
 
         return f_val, l_val, x_del_f
 
+    def compute_accuracy(self, y, f):
+        f_acc_p = 0.
+        f_acc_n = 0.
+        f_acc_z = 0.
+        n = y.shape[0]
+        for i in range(n):
+            if y[i] * f[i] > 0:
+                if f[i] > 0:
+                    f_acc_p += 1.
+                elif f[i] < 0:
+                    f_acc_n += 1.
+                else:
+                    f_acc_z += 1.
 
-    def exec(self, X_l, X_u, L, y_l, y_u, y_p_l, y_p_u, f_p_l, f_p_u, lambda_1, lambda_2, iterations=100):
+        return f_acc_p, f_acc_n
+
+    def exec(self, X_l, X_u, L, y_l, y_u, y_p_l, y_p_u, f_p_l, f_p_u, _run, lambda_1=0.8, lambda_2=0.8,
+             iterations=100, center=False, random_state=0):
+
+        data_set_name = _run.config['dataset']['data_set_name']
+
         y_u_zeros = y_u.copy() * 0.0
 
         y = np.vstack((y_l, y_u_zeros))
@@ -143,109 +161,30 @@ class FistaOneBinaryClassifier(BinaryClassifier):
         m = y_l.shape[0]
         n = y_u.shape[0]
 
+        # Compute the stanford values.
+        s_acc = self.compute_accuracy(y_u, y_p_u)
+        y_p_u_cen = np.copy(y_p_u)
+        y_p_u_cen = y_p_u_cen - np.mean(y_p_u_cen)
+        s_acc_cen = self.compute_accuracy(y_u, y_p_u_cen)
+
+        _run.log_scalar('%s.fista_lasso.s_acc.%0.2f.%0.2f.%0.2d' % (data_set_name, lambda_1, lambda_2, random_state),
+                        s_acc, step=m)
+        _run.log_scalar(
+            '%s.fista_lasso.s_acc_cen.%0.2f.%0.2f.%0.2d' % (data_set_name, lambda_1, lambda_2, random_state),
+            s_acc_cen, step=m)
+
         f_val, l_val, x_del_f = self.execute_algorithm(L, y, f_p, lambda_1, lambda_2, iterations)
 
         f_predicted = np.add(f_p_u, x_del_f[m:])
+        f_predicted_center = f_predicted - f_predicted.mean()
 
-        # Stanford accuracy
-        s_acc = 0.
-        for i in range(n):
-            if y_u[i] * y_p_u[i] > 0:
-                s_acc += 1.
+        f_acc = self.compute_accuracy(y_u, f_predicted)
+        f_acc_cen = self.compute_accuracy(y_u, f_predicted_center)
 
-        #
-        f_acc = 0.
-        for i in range(n):
-            if y_u[i] * f_predicted[i] > 0:
-                f_acc += 1.
+        _run.log_scalar('%s.fista_lasso.f_acc.%0.2d.%0.2f.%0.2f' % (data_set_name, random_state, lambda_1, lambda_2),
+                        f_acc, step=m)
+        _run.log_scalar(
+            '%s.fista_lasso.f_acc_cen.%0.2d.%0.2f.%0.2f' % (data_set_name, random_state, lambda_1, lambda_2),
+            f_acc_cen, step=m)
 
-
-        s_acc = s_acc/n
-        f_acc = f_acc/n
-
-        return f_val, l_val, x_del_f, s_acc, f_acc
-
-    # def analyze_data(self, lambda_1, lambda_2, iterations=100):
-    #
-    #     lambda_1 = 0.4
-    #     lambda_2 = 0.6
-    #
-    #     # Split train and test data sets
-    #     X_l, X_u, L, y_l, y_u, y_p_l, y_p_u, f_p_l, f_p_u = self.train_test_split(self.X,
-    #                                                                               self.L,
-    #                                                                               self.y,
-    #                                                                               self.y_prime,
-    #                                                                               self.f_prime,
-    #                                                                               n_labeled)
-    #
-    #     y_u_zeros = y_u.copy() * 0.0
-    #
-    #     y = np.vstack((y_l, y_u_zeros))
-    #     f_p = np.vstack((f_p_l, f_p_u))
-    #     y_p = np.vstack((y_p_l, y_p_u))
-    #
-    #     m = y_l.shape[0]
-    #     n = y_u.shape[0]
-    #
-    #
-    #     # results.append([lambda_1, lambda_2, s_acc, f_acc, np.sum(x_del_f)])
-    #
-    #     # plt.plot(list(range(len(f_val))), f_val, c='k')
-    #
-    #     f, (ax1, ax2, ax3) = plt.subplots(3, 1)
-    #
-    #     results = []
-    #     for lambda_1 in np.arange(0.3, 1.5, 0.1):
-    #         for lambda_2 in np.arange(0.1, 1.5, 0.1):
-    #
-    #             f_val, l_val, x_del_f = self.execute_algorithm(L, y, f_p, lambda_1, lambda_2, iterations)
-    #
-    #             f_predicted = np.add(f_p_u, x_del_f[m:])
-    #
-    #             # Stanford accuracy
-    #             s_acc = 0
-    #             for i in range(n):
-    #                 if y_u[i] * y_p_u[i] > 0:
-    #                     s_acc += 1
-    #
-    #             #
-    #             f_acc = 0
-    #             for i in range(n):
-    #                 if y_u[i] * f_predicted[i] > 0:
-    #                     f_acc += 1
-    #
-    #             print([lambda_1, lambda_2, s_acc, f_acc, np.sum(x_del_f)])
-    #
-    #             ax1.plot(list(range(len(l_val))), f_val, c='g')
-    #             ax2.plot(list(range(len(f_val))), l_val, c='g')
-    #             ax3.plot(list(range(len(f_val))), np.divide(1., l_val), c='g')
-    #
-    #
-    #     plt.show()
-        #
-        #         # Execute algorithm
-        #         f_val, x_del_f = self.execute_algorithm(L, y, f_p, lambda_1, lambda_2)
-        #
-        #         f_predicted = np.add(f_p_u, x_del_f[m:])
-        #
-        #         # Stanford accuracy
-        #         s_acc = 0
-        #         for i in range(n):
-        #             if y_u[i] * y_p_u[i] > 0:
-        #                 s_acc += 1
-        #
-        #         #
-        #         f_acc = 0
-        #         for i in range(n):
-        #             if y_u[i] * f_predicted[i] > 0:
-        #                 f_acc += 1
-        #
-        #         print([lambda_1, lambda_2, s_acc, f_acc, np.sum(x_del_f)])
-        #         results.append([lambda_1, lambda_2, s_acc, f_acc, np.sum(x_del_f)])
-        #
-        #         # for i in range(n):
-        #         #     print("%0.2f %0.2f  %0.2f %0.2f"%(y_u[i],y_p_u[i],f_p_u[i], f_predicted[i]))
-        #         #
-        #         #
-        #
-        # # joblib.dump(results, '/tmp/results_l1_l2.dat', compress=5)
+        return None

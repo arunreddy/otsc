@@ -1,6 +1,6 @@
 from classifier.base_classifier import BaseClassifier
 import numpy as np
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, mean_squared_error, mean_absolute_error
 
 
 class BinaryClassifier(BaseClassifier):
@@ -41,3 +41,9 @@ class BinaryClassifier(BaseClassifier):
 
     def accuracy(self, y, pred):
         return accuracy_score(y, pred)
+
+    def mse(self,y,p):
+        return mean_squared_error(y,p)
+
+    def mae(self,y,p):
+        return mean_absolute_error(y,p)

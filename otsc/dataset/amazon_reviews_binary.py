@@ -32,9 +32,9 @@ class AmazonReviewsBinary(object):
 
 
     def load_data(self, n):
-        df_pos = pd.read_sql('SELECT * FROM amazon_reviews_tenk WHERE label=1 ORDER BY index ASC LIMIT %d ' % n,
+        df_pos = pd.read_sql('SELECT * FROM amazon_reviews_tenk WHERE label=-1 ORDER BY index ASC LIMIT %d ' % n,
                              con=create_engine(DB_ENGINE), parse_dates=True)
-        df_neg = pd.read_sql('SELECT * FROM amazon_reviews_tenk WHERE label=-1 ORDER BY index ASC LIMIT %d ' % n,
+        df_neg = pd.read_sql('SELECT * FROM amazon_reviews_tenk WHERE label=1 ORDER BY index ASC LIMIT %d ' % n,
                              con=create_engine(DB_ENGINE), parse_dates=True)
 
         df_pos['f_prime'] = df_pos['stanford_confidence_scores'].apply(lambda x: np.max(list(map(float, x.split(',')))))

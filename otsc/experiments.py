@@ -1,109 +1,165 @@
-import numpy as np
-from classifier.classifier_utils import train_test_split_with_fixed_test
-from classifier.svm_binary_classifier import SvmBinaryClassifier
-from classifier.fista_one_binary_classifier import FistaOneBinaryClassifier
-from matplotlib import pyplot as plt
+#!/usr/bin/env python
+# coding=utf-8
+"""
+This file runs all the experiments.
+"""
+from __future__ import division, print_function, unicode_literals
+
+import logging
+import os
+
 import joblib
+import numpy as np
+from sacred import Experiment, Ingredient
+from sacred.observers import MongoObserver
 
-class Experiments(object):
-    def __init__(self, X, L, D, y, y_prime, f_prime):
-        self.X = X
-        self.L = L
-        self.D = D
-        self.y = y
-        self.y_p = y_prime
-        self.f_p = f_prime
+from classifier.classifier_utils import train_test_split_with_fixed_test
+from classifier.classifiers import Classifiers
+from dataset import Imdb, AmazonReviewsBinary, AmazonFineFoodReviews
+from feat.features import FeaturesGenerator
 
-    def compare_algorithms(self, dataset, feat, n_iterations):
+logger = logging.getLogger()
 
-        results_global = []
-        r_f_accs_global = []
-        for random_state in range(5):
-            x = []
-            results = []
-            r_f_accs = []
-            for n_labeled in range(100, 2001, 100):
-                X_l, X_u, L, y_l, y_u, y_p_l, y_p_u, f_p_l, f_p_u = train_test_split_with_fixed_test(self.X,
-                                                                                                     self.L,
-                                                                                                     self.y,
-                                                                                                     self.y_p,
-                                                                                                     self.f_p,
-                                                                                                     n_labeled,
-                                                                                                     9000,
-                                                                                                     rand=random_state)
-                clf = SvmBinaryClassifier()
-                svm_accuracy = clf.exec(X_l, X_u, y_l, y_u)
+# ============== Ingredient 0: settings ==============================
+settings_ingredient = Ingredient("settings")
 
-                lambda_1 = 0.8
-                lambda_2 = 0.8
 
-                f_accs = []
-                print('> %d' % n_labeled)
-                for lambda_1 in np.arange(0.1, 1.0, 0.1):
-                    # for lambda_2 in np.arange(0.1, 1.0, 0.2):
+@settings_ingredient.config
+def cfg1():
+    verbose = True
+    data_home = '/media/d2/data-tmp/otsc/data'
 
-                    clf = FistaOneBinaryClassifier(self.X, self.L, self.D, self.y, self.y_p, self.f_p)
-                    f_val, l_val, x_del_f, s_acc, f_acc = clf.exec(X_l, X_u, L, y_l, y_u, y_p_l, y_p_u, y_p_l, y_p_u,
-                                                                   lambda_1,
-                                                                   lambda_2, iterations=n_iterations)
-                    f_accs.append(f_acc)
 
-                results.append([svm_accuracy, s_acc, np.mean(f_accs), np.max(f_accs), np.std(f_accs)])
-                x.append(n_labeled)
-                r_f_accs.append(f_accs)
+# ============== Ingredient 1: dataset ==============================
+dataset_ingredient = Ingredient("dataset", ingredients=[settings_ingredient])
 
-            results_global.append(results)
-            r_f_accs_global.append(r_f_accs)
 
-        results_global = np.asarray(results_global)
-        x = np.asarray(x)
-        r_f_accs_global = np.asarray(r_f_accs_global)
+@dataset_ingredient.config
+def cfg2(settings):
+    v = not settings['verbose']
+    base = '/home/sacred/'
+    data_set_name = 'amazon_fine_foods'
+    weighted = False
+    n_total = 100
+    sim = 'cosine'
 
-        print(x.shape)
-        print(results_global.shape)
-        print(r_f_accs_global.shape)
+    labeled_examples_start = 4
+    labeled_examples_end = 100
+    labeled_examples_step = 4
+    n_random_states = 3
 
-        # plt.errorbar(x, results[:, 0], yerr=results[:, 4] * 0.2, c='g', linestyle='--', marker='D', label='SVM',
-        #              barsabove=True,capsize=3.)
-        # plt.plot(x, results[:, 1], c='r', linestyle='--', marker='*', label='Stanford')
-        # plt.errorbar(x, results[:, 2], yerr=results[:, 4], c='k', linestyle='--', marker='o', label='OTSC-lasso',
-        #              barsabove=True,capsize=3.)
-        # plt.errorbar(x, results[:, 3], yerr=results[:, 4], c='b', linestyle='--', marker='P', label='OTSC-elasticnet',
-        #              barsabove=True,capsize=3.)
-        # plt.legend()
-        # plt.xlabel('# of labeled examples')
-        # plt.ylabel('Classificaton accuracy')
-        # plt.xticks(x, rotation='vertical')
-        # plt.grid(linestyle='dotted')
-        #
-        # if dataset == 'imdb':
-        #     plt.title('IMDB Dataset')
-        # elif dataset == 'amazon_fine_foods':
-        #     plt.title('Amazon Fine Food Reviews')
-        # elif dataset == 'amazon_binary':
-        #     plt.title('Amazon Reviews')
-        #
-        # plt.tight_layout()
-        # # plt.savefig('accuracy_%s.png' % dataset, dpi=600)
-        #
-        #
-        # Print
-        plt.figure(2)
-        r_f_accs_mean = np.mean(r_f_accs_global, axis=0)
-        r_f_accs_err = np.std(r_f_accs_global, axis=0)
 
-        results_mean = np.mean(results_global, axis=0)
+@dataset_ingredient.capture
+def load_data(settings, data_set_name, n_total, weighted, sim):
+    # If, a joblib file exists, return it.
+    if weighted:
+        joblib_file = os.path.join(settings['data_home'], data_set_name + str(n_total) + '_weighted_%s.dat' % sim)
+    else:
+        joblib_file = os.path.join(settings['data_home'], data_set_name + str(n_total) + '_%s.dat' % sim)
 
-        for ind in np.arange(1, 10, 1):
-            plt.errorbar(x, r_f_accs_mean[:, ind - 1], yerr=r_f_accs_err[:, ind - 1], label='OTSC-elastic [λ_1 = %0.2f]' % (ind * 0.1),linestyle='--', marker='*')
+    if os.path.exists(joblib_file):
+        logger.info('Returning from the joblib cache from file %s' % joblib_file)
+        return joblib.load(joblib_file)
 
-        plt.plot(x, results_mean[:, 1], c='r', linestyle='--', marker='*', label='Stanford')
-        plt.xlabel('# of labeled examples')
-        plt.ylabel('Classificaton accuracy')
-        plt.xticks(x, rotation='vertical')
-        plt.grid(linestyle='dotted')
-        plt.legend()
-        plt.title('λ_1 Parametric Analysis for %s features' % feat)
-        plt.savefig('lambda_1_%s_%s.png' % (dataset, feat), dpi=600)
-        joblib.dump([results_global,r_f_accs_global],'/tmp/results_lambda_1_%s_%s.dat'%(dataset, feat),compress=5)
-        plt.show()
+    # Else, create one, save and return it.
+    if data_set_name == 'imdb':
+        dataset = Imdb()
+    elif data_set_name == 'amazon_fine_foods':
+        dataset = AmazonFineFoodReviews()
+    elif data_set_name == 'amazon_binary':
+        dataset = AmazonReviewsBinary()
+    else:
+        logger.error('> Specify the dataset.')
+
+    # Generate the features.
+    df_pos, df_neg = dataset.load_data(n_total)
+
+    feat_generator = FeaturesGenerator()
+    X, L, D, y, y_prime, f_prime = feat_generator.generate_features(df_pos, df_neg, n_total, feat_type='tf-idf',
+                                                                    sim=sim)
+
+    if weighted:
+        f_prime = np.multiply(y_prime, f_prime)
+
+    logger.info('> Dumping the data into %s' % joblib_file)
+
+    # data = Data(X=X, y=y, yp=y_prime, fp=f_prime, L=L, D=D)
+    joblib.dump([X, L, D, y, y_prime, f_prime], joblib_file, compress=5)
+
+    return X, L, D, y, y_prime, f_prime
+
+
+def run_experiments(_run, X, L, D, y, y_prime, f_prime, n_iterations=100, n_random_states=2):
+    data_set_name = _run.config['dataset']['data_set_name']
+    n_random_states = _run.config['dataset']['n_random_states']
+    start = _run.config['dataset']['labeled_examples_start']
+    end = _run.config['dataset']['labeled_examples_end']
+    step = _run.config['dataset']['labeled_examples_step']
+
+    for random_state in range(n_random_states):
+        logger.info('Running all the algorithms for the random state %d' % random_state)
+        for n_labeled in range(start, end + 1, step):
+            X_l, X_u, l, y_l, y_u, y_p_l, y_p_u, f_p_l, f_p_u = train_test_split_with_fixed_test(X, L, y, y_prime,
+                                                                                                 f_prime,
+                                                                                                 n_labeled,
+                                                                                                 9000,
+                                                                                                 rand=random_state)
+
+            classifiers_list = ['fista_lasso_boost_svr', 'fista_lasso_boost', 'svm', 'svm_adversarial', 'xgb']
+            # ['xgb', 'svm', 'fista_lasso_boost', 'fista_lasso_boost_svr']  #
+            Classifiers.execute_classifiers(_run, X_l, X_u, l, y_l, y_u, y_p_l, y_p_u, f_p_l, f_p_u, classifiers_list,
+                                            random_state, n_labeled)
+
+
+# ============== Experiment ==========================================
+ex = Experiment('OTSC', ingredients=[dataset_ingredient])
+ex.observers.append(MongoObserver.create())
+
+
+#
+# @ex.pre_run_hook
+# def pre_hook(_run):
+#
+#
+#
+@ex.post_run_hook
+def post_hook(_run):
+    logger.info('Finished running the algorithms.')
+    print(_run.config)
+    print(_run)
+    print(_run.meta_info)
+    print(_run.info)
+
+    # plt.figure(figsize=(8.5, 4))
+    # plot(_run._id, '_cosine')
+    # plt.grid(linestyle='dotted')
+    # plt.legend()
+    # plt.tight_layout()
+    # plt.title('Amazon Fine Food reviews dataset')
+    # plt.savefig('figure.png', dpi=600)
+    # # plt.show()
+    #
+
+
+@ex.automain
+def main(_run):
+    data_set_name = _run.config['dataset']['data_set_name']
+    # Load the dataset.
+    X, L, D, y, y_prime, f_prime = load_data(data_set_name=data_set_name, n_total=5000, weighted=True,
+                                             sim='cosine')
+
+    # den = np.max(f_prime) - np.min(f_prime)
+    # # f_prime = f_prime - np.min(f_prime)
+    # #
+    # f_prime = f_prime/den
+
+    #
+    # hist = np.histogram(f_prime,bins=20,range=[-1,1])
+    # print(hist)
+
+    # import matplotlib.pyplot as plt
+    #
+    # plt.hist(f_prime,bins=20)
+    # plt.show()
+    # # Execute the experiments.
+    run_experiments(_run, X, L, D, y, y_prime, f_prime)
